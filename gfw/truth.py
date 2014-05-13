@@ -99,7 +99,13 @@ def _landsat_id(alert_date, coords, offset_days=30):
     coll = ee.ImageCollection('LANDSAT/LC8_L1T_TOA')
     filtered = coll.filterDate(begin_date, alert_date).filterBounds(poly)
     desc = filtered.sort('system:time_start', False).limit(1)
-    return desc.getInfo()['features'][0]['id']
+
+    try:
+        idx = desc.getInfo()['features'][0]['id']
+    except IndexError:
+        idx = None
+
+    return idx
 
 
 def _landsat_median(alert_date, coords, offset_days=90):
@@ -125,15 +131,18 @@ def _img_url(image_id, coords):
     Args:
       image_id: The GEE Landsat asset ID, string
       coords: nested list of box coordinates, counter-clockwise"""
-    loc = 'LANDSAT/%s' % image_id
-    img = ee.Image(loc)
-    color = img.select("B6", "B5", "B4")
-    pan = img.select("B8")
-    sharp = _hsvpan(color, pan)
-    vis_params = {'min': 0.01, 'max': 0.5, 'gamma': 1.7}
-    visual_image = sharp.visualize(**vis_params)
-    params = {'scale': 30, 'crs': 'EPSG:4326', 'region': str(coords)}
-    url = visual_image.getThumbUrl(params)
+    if image_id:
+        loc = 'LANDSAT/%s' % image_id
+        img = ee.Image(loc)
+        color = img.select("B6", "B5", "B4")
+        pan = img.select("B8")
+        sharp = _hsvpan(color, pan)
+        vis_params = {'min': 0.01, 'max': 0.5, 'gamma': 1.7}
+        visual_image = sharp.visualize(**vis_params)
+        params = {'scale': 30, 'crs': 'EPSG:4326', 'region': str(coords)}
+        url = visual_image.getThumbUrl(params)
+    else:
+        url = 'http://i.imgur.com/jRtVWde.png'
     return url
 
 
