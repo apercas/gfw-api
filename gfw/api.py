@@ -58,6 +58,17 @@ CREATE_STORY_EMAILS = r'/stories/email'
 GET_STORY = r'/stories/<id:\d+>'
 
 
+class SubHandler(webapp2.RequestHandler):
+
+    def get(self):
+        subs = []
+        for s in pubsub.Subscription.get_by_topic('updates/forma'):
+            subs.append('%s,%s' % (s.email, json.dumps(s.params)))
+        self.response.headers.add_header('charset', 'utf-8')
+        self.response.headers['Content-Type'] = 'text/csv'
+        self.response.out.write('\n'.join(subs))
+
+
 class BaseApi(webapp2.RequestHandler):
     """Base request handler for API."""
 
@@ -320,6 +331,8 @@ routes = [
     webapp2.Route(LIST_STORIES, handler=StoriesApi,
                   handler_method='list'),
     webapp2.Route(GET_STORY, handler=StoriesApi,
+                  handler_method='get'),
+    webapp2.Route(r'/subout', handler=SubHandler,
                   handler_method='get'),
     webapp2.Route(WDPA, handler=WdpaApi,
                   handler_method='site'),

@@ -151,6 +151,14 @@ def alerts(params):
 
 def download(params):
     """Return CartoDB download URL for supplied parameters."""
+    begin = params.get('begin')
+    if len(begin) == 4:
+        begin = '%s-01-01' % begin
+        params['begin'] = begin
+    end = params.get('end')
+    if len(end) == 4:
+        end = '%s-01-01' % end
+        params['end'] = end
     if 'format' in params and params.get('format') != 'csv':
         params['select'] = ', the_geom'
     else:
@@ -167,6 +175,14 @@ def download(params):
 
 
 def analyze(params):
+    begin = params.get('begin')
+    if len(begin) == 4:
+        begin = '%s-01-01' % begin
+        params['begin'] = begin
+    end = params.get('end')
+    if len(end) == 4:
+        end = '%s-01-01' % end
+        params['end'] = end
     if 'geom' in params:
         query = GEOJSON_SQL.format(**params)
     elif 'iso' in params:

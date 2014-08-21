@@ -1,96 +1,35 @@
 # Global Forest Watch API
 
-This document describes the official Global Forest Watch API.
+This document describes the official Global Forest Watch API which is currently in beta. Interested in being a trusted tester? Contact the Data Lab (datalab@wri.org) at World Resources Institute.
 
-The API supports analyzing and downloading entire datasets or specific regions of datasets. Regions are specified using a polygon id (country name for example) or a GeoJSON polygon. Supported download formats include Shapefile, GeoJSON, SVG, KML, and CSV. The API is accessed over HTTP from `gfw-apis.appspot.com` and all data is sent and received as JSON.
+![](http://i.imgur.com/P26FPQ4.jpg)
 
-### Analyze and download datasets
+# Overview
 
-Analyze dataset: `GET /datasets/:name` 
+The API currently focuses on:
 
-http://wip.gfw-apis.appspot.com/datasets/imazon?begin=2009-01-01&end=2013-01-01
+1. Analysis
+1. Pubsub
+1. Stories
+1. Countries
 
-Download dataset: `GET /datasets/:name.(svg|geojson|shp|kml|csv)` 
+Authentication currently requires API tokens. 
 
-http://wip.gfw-apis.appspot.com/datasets/imazon.svg?begin=2009-01-01&end=2013-01-01
+## Analysis
 
-Parameters
+The **Analysis API** provides basic analysis about deforestation within a GeoJSON Polygon or MultiPolygon for multiple datasets available through GFW including FORMA, UMD, IMAZON, MODIS, fires, and concessions. Analysis results can be downloaded in multiple formats including GeoJSON, Shapefile, KML, SVG, and CSV.
 
-Name | Type | Required |Description
---- | --- | --- | ---
-begin | string | ✓ | Start date in YYYY-MM-DD format.
-end | string | ✓ | Start date in YYYY-MM-DD format.details | string |  | Story details.
-iso | string |  | Country ISO code to analyze.
-geom | string |  | GeoJSON for area to analyze.
+## Pubsub
 
+The **Pubsub API** supports subscribing to GFW to receive automatic updates about specific datasets within a GeoJSON Polygon or MultiPolygon. For example, you can subscribe to FORMA to received updates when alerts are detected in your area of interest.
 
-### User submitted stories
+## Stories
 
-The Stories API supports creating, updating, deleting, listing, and searching for stories submitted to Global Forest Watch by members of the community. A story is searchable on content, searchable spatially, and can have multiple media objects associated with it (photos, videos, etc). Users who submit a story are issued a story token used to authenticate future story modifications.
+The **Stories API** supports reading, creating, editing, and deleting user curated stories. Authentication is required using a GFW issued API token. Stories can also be listed for specific areas. 
 
-List all stories: `GET /stories`
+## Countries
 
-http://wip.gfw-apis.appspot.com/stories
-
-Get story by id: `GET /stories/:id`
-
-http://wip.gfw-apis.appspot.com/stories/12
-
-```json
-{
-   "name":"User",
-   "title":"Forest saved",
-   "media":[
-      {
-         "url":"http://gfw.stories.s3.amazonaws.com/uploads/big_forest.jpeg",
-         "embed_url":"",
-         "preview_url":"http://gfw.stories.s3.amazonaws.com/uploads/thumb_forest.jpeg",
-         "mime_type":"image/jpeg",
-         "order":1
-      }
-   ],
-   "id":12,
-   "visible":true,
-   "featured":false,
-   "geom":{
-      "type":"Point",
-      "coordinates":[
-         23.90625,
-         0
-      ]
-   },
-   "details":"Old growth in Congo saved.",
-   "date":"2013-11-26T00:00:00+0100",
-   "email":"user@gmail.com",
-   "location":"Congo, Africa"
-}
-```
-
-Create new story by POSTing story properties as JSON: `POST /stories/new`
-```bash
-$ curl -i -d '{"email": "foo", "date": "2013-11-26", "media": [{"url": "foo", "embed_url": "foo", "order": 1, "mime_type": "foo", "preview_url": "foo"}], "geom": {"type": "Point", "coordinates": [23.90625, 0]}, "name": "foo", "title": "foo"}' http://wip.gfw-apis.appspot.com/stories/new
-```
-Properties
-
-Name | Type | Required |Description
---- | --- | --- | ---
-title | string | ✓ | Story title.
-details | string |  | Story details.
-date | string |  | When the story happened in ISO 8601 format YYYY-MM-DDTHH:MM:SSZ
-location | string |  | Where the story happened.
-featured | boolean |  | True if the story is featured.
-visible | boolean |  | True if the story is visible.
-email | string | ✓ | Email of user who submitted story.
-name | string | ✓ | Name of user who submitted story.
-geom | string | ✓ | GeoJSON object of story location.
-token | string |  | User token for authorization.
-media | string |  | JSON list of media objects (url, preview_url, embed_url, order, mime_type)
-
-### FORMA alert count by country
-
-`GET /countries/alerts`
-
-http://wip.gfw-apis.appspot.com/countries/alerts
+The **Countries API** provides information about forests for individual countries by ISO code.
 
 # Developing
 

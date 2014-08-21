@@ -30,7 +30,7 @@ from gfw import cdb
 
 SUM = """SELECT iso, sum(loss_gt_0) loss, avg(gain) gain
          FROM umd
-         WHERE year >= {begin} AND year <= {end} AND iso = upper('{iso}')
+         WHERE year >= {begin} AND year < {end} AND iso = upper('{iso}')
          GROUP BY iso"""
 
 
@@ -41,7 +41,7 @@ def _get_coords(geojson):
 def _sum_range(data, begin, end):
     return sum(
         [value for key, value in data.iteritems()
-            if (int(key) >= int(begin)) and (int(key) <= int(end))])
+            if (int(key) >= int(begin)) and (int(key) < int(end))])
 
 
 def _get_umd_range(result, begin, end):
@@ -57,7 +57,13 @@ def _get_range(result, begin, end):
 def _ee(urlparams, asset_id):
     params = copy.copy(urlparams)
     loss_by_year = ee.Image(config.assets[asset_id])
-    poly = _get_coords(json.loads(params.get('geom')))
+    geom = json.loads(params.get('geom'))
+    poly = _get_coords(geom)
+    ptype = geom.get('type')
+    if ptype.lower() == 'multipolygon':
+        region = ee.Geometry.MultiPolygon(poly)
+    else:
+        region = ee.Geometry.Polygon(poly)
     params.pop('geom')
     if 'begin' in params:
         params.pop('begin')
@@ -75,7 +81,6 @@ def _ee(urlparams, asset_id):
         params['bestEffort'] = bool(params['bestEffort'])
     else:
         params['bestEffort'] = True
-    region = ee.Geometry.Polygon(poly)
     reduce_args = {
         'reducer': ee.Reducer.sum(),
         'geometry': region
