@@ -30,6 +30,7 @@ class FiresSql(Sql):
         FROM global_7d pt
         WHERE acq_date::date >= '{begin}'::date
             AND acq_date::date <= '{end}'::date
+            AND CAST(confidence AS INT)> 30
             AND ST_INTERSECTS(
                 ST_SetSRID(ST_GeomFromGeoJSON('{geojson}'), 4326), the_geom)"""
 
@@ -42,7 +43,8 @@ class FiresSql(Sql):
             WHERE iso = UPPER('{iso}')) as p
         WHERE ST_Intersects(pt.the_geom, p.the_geom)
             AND acq_date::date >= '{begin}'::date
-            AND acq_date::date <= '{end}'::date"""
+            AND acq_date::date <= '{end}'::date
+            AND CAST(confidence AS INT)> 30"""
 
     ID1 = """
         SELECT COUNT(pt.*) AS value
@@ -54,7 +56,8 @@ class FiresSql(Sql):
                    AND id_1 = {id1}) as p
         WHERE ST_Intersects(pt.the_geom, p.the_geom)
             AND acq_date::date >= '{begin}'::date
-            AND acq_date::date <= '{end}'::date"""
+            AND acq_date::date <= '{end}'::date
+            AND CAST(confidence AS INT)> 30"""
 
     WDPA = """
         SELECT COUNT(pt.*) AS value
@@ -62,7 +65,8 @@ class FiresSql(Sql):
             (SELECT * FROM wdpa_all WHERE wdpaid = {wdpaid}) as p
         WHERE ST_Intersects(pt.the_geom, p.the_geom)
             AND acq_date::date >= '{begin}'::date
-            AND acq_date::date <= '{end}'::date"""
+            AND acq_date::date <= '{end}'::date
+            AND CAST(confidence AS INT)> 30"""
 
     USE = """
         SELECT COUNT(pt.*) AS value
@@ -70,7 +74,8 @@ class FiresSql(Sql):
             (SELECT * FROM {use_table} WHERE cartodb_id = {pid}) as p
         WHERE ST_Intersects(pt.the_geom, p.the_geom)
             AND acq_date::date >= '{begin}'::date
-            AND acq_date::date <= '{end}'::date"""
+            AND acq_date::date <= '{end}'::date
+            AND CAST(confidence AS INT)> 30"""
 
     @classmethod
     def download(cls, sql):
