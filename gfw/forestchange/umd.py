@@ -122,7 +122,7 @@ class UmdSql(Sql):
         WHERE iso = UPPER('{iso}')
               AND thresh = {thresh}
               AND id1 = {id1}
-        ORDER BY year"""
+              and year = 2000"""
 
     USE = """
         SELECT ST_AsGeoJson(the_geom) AS geojson
