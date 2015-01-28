@@ -17,9 +17,11 @@
 
 """This module supports pubsub."""
 
+import arrow
 import json
 import webapp2
 import monitor
+import datetime
 from gfw import polyline
 from gfw import forma
 from gfw import cdb
@@ -29,6 +31,8 @@ from google.appengine.api import mail
 from google.appengine.api import taskqueue
 from google.appengine.ext.webapp.mail_handlers import InboundMailHandler
 import logging
+import re
+from google.appengine.api import users
 
 
 class Subscription(ndb.Model):
@@ -42,6 +46,10 @@ class Subscription(ndb.Model):
     def get_by_topic(cls, topic):
         """Return all confirmed Subscription entities for supplied topic."""
         return cls.query(cls.topic == topic, cls.confirmed == True).iter()
+
+    @classmethod
+    def get_by_email(cls, email):
+        return cls.query(cls.email == email).iter()
 
     @classmethod
     def unsubscribe(cls, topic, email):
@@ -116,91 +124,122 @@ class Subscriber(InboundMailHandler):
         s.put()
 
 
-class Notifier(webapp2.RequestHandler):
+NOTIFY_BODY = """You have subscribed to forest change alerts through Global
+Forest Watch. This message reports new forest change alerts for one of your
+areas of interest (a country or self-drawn polygon).
 
-    def _body(self, alert, n, e, s):
-        body = """You have subscribed to forest change alerts through Global Forest Watch. This message reports new forest change alerts for one of your areas of interest (a country or self-drawn polygon).
+<br><br>
 
-A total of {value} {name} {unit} were detected within your area of interest in the past {interval}. Explore the details of this dataset on Global Forest Watch <a href="http://globalforestwatch.com/sources#forest_change">here</a>. 
+A total of {value} {name} {unit} were detected within your area of interest in
+the past {interval}. Explore the details of this dataset on Global Forest
+Watch by <a href='{link}'>clicking here</a>.
 
-Your area of interest is {aoi}, as shown in the map below:
+<br><br>
 
-{aoi-vis}
+You can unsubscribe or manage your subscriptions by emailing: gfw@wri.org
 
-You can unsubscribe or manage your subscriptions by emailing: gfw@wri.org 
+<br><br>
 
-You will receive a separate e-mail for each distinct polygon, country, or shape on the GFW map. You will also receive a separate e-mail for each dataset for which you have requested alerts (FORMA alerts, Imazon SAD Alerts, and NASA QUICC alerts.)
+You will receive a separate e-mail for each distinct polygon, country, or shape
+on the GFW map. You will also receive a separate e-mail for each dataset for
+which you have requested alerts (FORMA alerts, Imazon SAD Alerts, and NASA
+QUICC alerts.)
 
-Please note that this information is subject to the Global Forest Watch <a href='http://globalforestwatch.com/terms'>Terms of Service</a>.
+<br><br>
+
+Please note that this information is subject to the Global Forest Watch <a
+href='http://globalforestwatch.com/terms'>Terms of Service</a>.
 """
 
-        html = """You have subscribed to forest change alerts through Global Forest Watch. This message reports new forest change alerts for one of your areas of interest (a country or self-drawn polygon).
-<p>
-A total of {value} {name} {unit} were detected within your area of interest in the past {interval}. Explore the details of this dataset on Global Forest Watch <a href="http://globalforestwatch.com/sources#forest_change">here</a>. 
-<p>
-Your area of interest is {aoi}, as shown in the map below:
-<p>
-{aoi-vis}
-<p>
-You can unsubscribe or manage your subscriptions by emailing: gfw@wri.org 
-<p>
-You will receive a separate e-mail for each distinct polygon, country, or shape on the GFW map. You will also receive a separate e-mail for each dataset for which you have requested alerts (FORMA alerts, Imazon SAD Alerts, and NASA QUICC alerts.)
-<p>
-Please note that this information is subject to the Global Forest Watch <a href='http://globalforestwatch.com/terms'>Terms of Service</a>.
-"""
-        logging.info('HEY')
-        alert['interval'] = 'month'
-        if not alert['value']:
-            alert['value'] = 0
+LINK_GEOM = """http://www.globalforestwatch.org/map/3/{lat}/{lon}/ALL/grayscale/forma?geojson={geom}&begin={begin}&end={end}"""
+
+# LINK_ISO = """http://www.globalforestwatch.org/country/{iso}"""
+
+LINK_ISO = """http://www.globalforestwatch.org/map/4/0/0/{iso}/grayscale/forma?begin={begin}&end={end}"""
+
+
+class Notify(webapp2.RequestHandler):
+
+    def _center(self, geom):
+        return json.loads(geom)['coordinates'][0][0]
+
+    def _get_max_forma_date(self):
+        sql = 'SELECT MAX(date) FROM forma_api;'
+        response = cdb.execute(sql)
+        if response.status_code == 200:
+            max_date = json.loads(response.content)['rows'][0]['max']
+            return arrow.get(max_date)
+
+    def _period(self):
+        max_forma_date = self._get_max_forma_date()
+        past_month = max_forma_date.replace(months=-1)
+        #month = int(datetime.datetime.now().strftime("%m"))
+        #year = datetime.datetime.now().strftime("%Y")
+        end = '%s-01' % max_forma_date.format('YYYY-MM')
+        begin = '%s-01' % past_month.format('YYYY-MM')
+        return begin, end
+        #return '%s-%i-01' % (year, month), '%s-%s-01' % (year, month + 1)
+
+    def _body(self, result, n, e, s):
+        begin, end = self._period()
+        result['end'] = end
+        result['begin'] = begin
+        result['interval'] = 'month'
+        logging.info(s)
+        if not result['value']:
+            result['value'] = 0
         if 'geom' in s:
-            alert['aoi'] = 'a user drawn polygon'
-            coords = json.loads(s['geom'])['coordinates'][0][0]
-            coords = [[float(j) for j in i] for i in coords]
-            poly = polyline.encode_coords(coords)
-            url = u"http://maps.googleapis.com/maps/api/staticmap?sensor=false&size=600x400&path=fillcolor:0xAA000033|color:0xFFFFFF00|enc:%s" % poly
-            alert['aoi-vis'] = '<img src="%s">' % url
+            result['aoi'] = 'a user drawn polygon'
+            lat, lon = self._center(s['geom'])
+            result['lat'] = lat
+            result['lon'] = lon
+            result['geom'] = s['geom']
+            result['link'] = LINK_GEOM.format(**result)
         else:
-            alert['aoi'] = 'a country (%s)' % s['iso']
-            sql = "SELECT ST_AsGeoJSON(ST_ConvexHull(the_geom)) FROM world_countries where iso3 = upper('%s')" % s['iso']
-            logging.info('SQL %s' % sql)
-            response = cdb.execute(sql)
-            if response.status_code == 200:
-                result = json.loads(response.content)
-                coords = json.loads(result['rows'][0]['st_asgeojson'])['coordinates']
-                poly = polyline.encode_coords(coords[0])
-                url = "http://maps.googleapis.com/maps/api/staticmap?sensor=false&size=600x400&path=fillcolor:0xAA000033|color:0xFFFFFF00|enc:%s" % poly
-                alert['aoi-vis'] = '<img src="%s">' % url
-            else:
-                raise Exception('CartoDB Failed (status=%s, content=%s, \
-                                q=%s)' % (response.status_code,
-                                          response.content,
-                                          sql))
-        return body.format(**alert), html.format(**alert)
+            result['aoi'] = 'a country (%s)' % s['iso']
+            result['iso'] = s['iso'].upper()
+            result['link'] = LINK_ISO.format(**result)
+        result['link'] = re.sub('\s+', '', result['link']).strip()
+        return NOTIFY_BODY.format(**result)
 
     def post(self):
-        """"""
         try:
             n = ndb.Key(urlsafe=self.request.get('notification')).get()
+            if n.sent:
+                logging.info("skipping notification, already sent...")
+                return
             e = n.params['event']
             s = n.params['subscription']
+            s['forma_date'] = self._get_max_forma_date().format('YYYY-MM-DD')
             response = forma.subsription(s)
             if response.status_code == 200:
                 result = json.loads(response.content)['rows'][0]
-                body, html = self._body(result, n, e, s)
+                body = self._body(result, n, e, s)
+                to = s['email']
+                logging.info('E %s' % e)
+                if 'dry_run' in e:
+                    # eightysteele@gmail.com,asteele.wri.org
+                    tester, subscriber = e['dry_run'].split(',')
+                    logging.info('PUB DRYRUN tester=%s subscriber=%s to=%s' %
+                                (tester, subscriber, to))
+                    if subscriber == to:
+                        to = tester
+                        logging.info('PUB DRYRUN sending email to %s' % to)
+                    else:
+                        return
                 mail.send_mail(
                     sender='noreply@gfw-apis.appspotmail.com',
-                    to=s['email'],
-                    subject='New Forest Change Alerts from Global Forest Watch',
+                    to=to,
+                    subject='New Alerts from Global Forest Watch',
                     body=body,
-                    html=html)
+                    html=body)
+                n.sent = True
+                n.put()
             else:
                 raise Exception('CartoDB Failed (status=%s, content=%s)' %
                                (response.status_code, response.content))
         except Exception, e:
-            name = e.__class__.__name__
-            msg = 'Error: Publish %s (%s)' % (json.dumps(s), name)
-            monitor.log(self.request.url, msg, error=e,
-                        headers=self.request.headers)
+            logging.exception(e)
 
 
 class Confirmer(webapp2.RequestHandler):
@@ -230,7 +269,6 @@ class Publisher(webapp2.RequestHandler):
     def post(self):
         """Publish notifications to all event subscribers."""
         e = ndb.Key(urlsafe=self.request.get('event')).get()
-        dry_run = self.request.get('dry_run', False)
         if not e.multicasted:
             for s in Subscription.get_by_topic(e.topic):
                 n = Notification.get(e, s)
@@ -240,8 +278,18 @@ class Publisher(webapp2.RequestHandler):
                 taskqueue.add(
                     url='/pubsub/notify',
                     queue_name='pubsub-notify',
-                    params=dict(notification=n.key.urlsafe(), dry_run=dry_run))
+                    params=dict(notification=n.key.urlsafe()))
         e.multicasted = True
         e.put()
+
+
+class SubscriptionDump(webapp2.RequestHandler):
+    def get(self):
+        email = self.request.get('email')
+        subs = [x.to_dict(exclude=['created']) for x in Subscription.get_by_email(email)]
+        self.response.headers.add_header('charset', 'utf-8')
+        self.response.headers["Content-Type"] = "application/json"
+        self.response.out.write(json.dumps(subs, sort_keys=True))
+
 
 handlers = webapp2.WSGIApplication([Subscriber.mapping()], debug=True)
